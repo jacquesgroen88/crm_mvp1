@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function belongsToOrganization(orgId) {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOrgAdmin(orgId) {
+      return belongsToOrganization(orgId) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
+
+    // Organizations collection
+    match /organizations/{orgId} {
+      allow read: if belongsToOrganization(orgId);
+      allow create: if isSignedIn();
+      allow update: if isOrgAdmin(orgId);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId || 
+        belongsToOrganization(resource.data.organizationId)
+      );
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Invite codes collection
+    match /inviteCodes/{code} {
+      // Allow reading invite codes without requiring organization membership
+      allow read: if isSignedIn();
+      // Allow any signed-in user to create invite codes (validation happens in application code)
+      allow create: if isSignedIn();
+      // Allow any signed-in user to delete codes (validation happens in application code)
+      allow delete: if isSignedIn();
+    }
+
+    // Deals collection
+    match /deals/{dealId} {
+      allow read: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+      allow create: if isSignedIn() && belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+      allow delete: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+    }
+
+    // Custom Fields collection
+    match /customFields/{fieldId} {
+      allow read: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+      allow create: if isSignedIn() && belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+      allow delete: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+    }
+
+    // Notes collection
+    match /notes/{noteId} {
+      allow read: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+      allow create: if isSignedIn() && belongsToOrganization(request.resource.data.organizationId);
+      allow update: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+      allow delete: if isSignedIn() && belongsToOrganization(resource.data.organizationId);
+    }
+
+    // Pipeline stages collection
+    match /pipelines/{orgId} {
+      allow read: if belongsToOrganization(orgId);
+      allow write: if belongsToOrganization(orgId);
+    }
+  }
+}

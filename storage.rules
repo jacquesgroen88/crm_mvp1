@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function belongsToOrganization(orgId) {
+      return request.auth != null && 
+             firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId;
+    }
+
+    function isImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // Profile images
+    match /profiles/{userId}/avatar {
+      allow read: if isSignedIn();
+      allow write: if request.auth.uid == userId &&
+                     isImageType() &&
+                     request.resource.size < 5 * 1024 * 1024; // 5MB max
+    }
+
+    // Note attachments
+    match /notes/{filename} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+                      isImageType() &&
+                      request.resource.size < 10 * 1024 * 1024; // 10MB max
+      allow delete: if isSignedIn();
+    }
+  }
+}
